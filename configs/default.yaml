@@ -1,0 +1,174 @@
+seed: 1337
+
+paths:
+  root: .
+  data: ${paths.root}/data
+  train: ${paths.data}/train
+  # Held out. COCO val2017 + DALL-E Advanced. Never train or fit on this.
+  eval: ${paths.data}/eval
+  cache: ${paths.root}/cache
+  runs: ${paths.root}/runs
+
+data:
+  crop_size: 224
+  crops_per_image: 4
+  # Crops are taken at native resolution; whole images are never resized.
+  min_side: 256
+  num_workers: 8
+  val_fraction: 0.1
+  manifest: ${paths.data}/manifest.csv
+  # A bpp-matched subset of val, written beside the manifest rather than into
+  # it: `split` is one column, so a val row cannot also be a val_matched row,
+  # and moving rows out of val would quietly shrink the split everything else
+  # reads. Training splits are untouched either way.
+  val_matched_manifest: ${paths.data}/manifest_val_matched.csv
+  # 0.2 pooled SD, the usual caliper. Pairs wider than this are dropped rather
+  # than kept, so the tails cannot reintroduce the imbalance being removed.
+  val_matched_caliper_sd: 0.2
+  extensions: [.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff]
+  # SID_Set label 0 is 100% JPEG, label 1 is 100% PNG and 100% 1024x1024:
+  # container format alone separates the classes perfectly. Without matching,
+  # the model learns "PNG = fake" and that cue dies at the first JPEG re-encode.
+  # Set false to reproduce the naive baseline that collapses under transforms.
+  bias_match: true
+  match_quality: 90
+  # Tampered images passed through a real camera pipeline; labelling them fake
+  # contradicts the provenance cue. Kept in the manifest, excluded from training.
+  include_tampered: false
+
+sources:
+  sid_set:
+    root: ${paths.data}/train/sid_set
+    split: train
+    # No split_by: generator. SID_Set carries no generator metadata -- the
+    # parquet schema is img_id/image/mask/width/height/label, and the synthetic
+    # ids are a flat full_synthetic_NNNNNN sequence with nothing to group on.
+    # A generator holdout here would have to be invented, so it is not offered.
+    classes:
+      real: {glob: "real/**", label: 0}
+      synthetic: {glob: "synthetic/**", label: 1}
+      tampered: {glob: "tampered/**", label: 2}
+  wildfake:
+    root: ${paths.data}/train/wildfake
+    split: train
+    stratify_on: parent
+    max_per_stratum: 2000
+    # WildFake's generators are its directory names, so val can hold out whole
+    # generators. This measures generalisation to an unseen generator rather
+    # than to unseen images from a seen one; the two numbers are not comparable
+    # and this one is always lower.
+    split_by: generator
+    generator_from: parent
+    holdout_generators: 2
+    classes:
+      real: {glob: "Real/**", label: 0}
+      fake: {glob: "Other_based/**", label: 1}
+  coco_val2017:
+    root: ${paths.eval}/coco_val2017
+    split: eval
+    classes:
+      real: {glob: "**", label: 0}
+  dalle_advanced:
+    root: ${paths.eval}/dalle_advanced
+    split: eval
+    classes:
+      fake: {glob: "**", label: 1}
+
+model:
+  clip:
+    # Not "ViT-L-14": OpenAI's weights want QuickGELU, and the bare name builds
+    # plain GELU with only a warning. See FrozenCLIP.__init__.
+    arch: ViT-L-14-quickgelu
+    pretrained: openai
+    frozen: true
+    probe_heads: 8
+    # Probe width, not token width. Tokens are 1024 wide; at probe_dim 1024 the
+    # k/v/out projections alone are 3.1M params, over the 2B-total budget's
+    # share for this branch. 512 keeps the probe at ~1.4M.
+    probe_dim: 512
+    # 512 KiB of fp16 patch tokens per crop. Shards are memmapped at train time.
+    cache_shard_size: 512
+  srm:
+    # Explicit channel plan rather than width/depth: the ~5M budget depends on
+    # exactly where the widening happens, and a derived plan hid that.
+    # First layer is the fixed 30-kernel bank (3 channels x 30 = 90 maps).
+    channels: [64, 128, 256, 256, 512, 512]
+    # Pooling starts after block index 2; blocks 0-1 run at native crop scale.
+    pool_after: 2
+    # TLU disabled, against steganalysis practice, because it was measured to
+    # hurt here. Clamping discards residual magnitude and keeps mostly how often
+    # the residual saturates, which is close to a description of where JPEG
+    # spends bits. Ridge R^2 predicting bytes-per-pixel from the 90 per-map
+    # residual energies, and logistic AUC on the bpp-matched val split:
+    #
+    #   threshold      bpp R^2    AUC on val_matched
+    #   3.0 (Ye)        0.977          0.808
+    #   15              0.924          0.768
+    #   100             0.766          0.778
+    #   disabled        0.492          0.818
+    #
+    # Every threshold is worse on both axes at once, so this is not a value to
+    # tune. Unclamped residuals are heavy-tailed; the BatchNorm after the first
+    # conv absorbs the scale, and train.py clips gradients. See runs/*/
+    # srm_frontend_decision.json.
+    tlu_threshold: 0.0
+    dropout: 0.1
+  spectral:
+    enabled: false
+    n_bands: 32
+  gating:
+    hidden: 64
+
+train:
+  epochs: 10
+  batch_size: 64
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  amp: true
+  lambda_consistency: 1.0
+
+eval:
+  batch_size: 64
+  crops_per_image: 8
+  aggregate: trimmed_mean
+  # Quantile bins for bpp-stratified AUC. Inside a bin the classes are close to
+  # bpp-matched, so the compressibility shortcut is largely unavailable and the
+  # per-bin AUC is closer to what the model found in the pixels.
+  bpp_bins: 5
+
+calibrate:
+  method: temperature
+  target_fpr: 0.01
+
+# Content-blind confound probe. Fits on the eval split by design: it measures
+# how separable COCO and DALL-E are from headers alone, and nothing downstream
+# reads its output.
+shortcut:
+  sources: [coco_val2017, dalle_advanced]
+  max_per_class: 2000
+  folds: 5
+  C: 1.0
+  max_iter: 2000
+  # 256 is the largest square that most of COCO val2017 contains outright;
+  # the short tail below it is reflect-padded and counted.
+  match_size: 256
+  match_quality: 90
+  match_subsampling: "4:2:0"
+
+transforms:
+  eval:
+    jpeg:           {param: quality,   values: [90, 70, 50, 30]}
+    gaussian_blur:  {param: sigma,     values: [0.5, 1.0, 2.0]}
+    resize:         {param: scale,     values: [0.5, 0.25]}
+    gaussian_noise: {param: sigma,     values: [0.02, 0.05, 0.10]}
+    color_jitter:   {param: strength,  values: [0.2]}
+    center_crop:    {param: fraction,  values: [0.8]}
+  train:
+    n_compose: [1, 2]
+    jpeg:           {quality:  [20, 100]}
+    gaussian_blur:  {sigma:    [0.0, 2.5]}
+    resize:         {scale:    [0.2, 1.0]}
+    gaussian_noise: {sigma:    [0.0, 0.12]}
+    color_jitter:   {strength: [0.0, 0.25]}
+    center_crop:    {fraction: [0.7, 1.0]}

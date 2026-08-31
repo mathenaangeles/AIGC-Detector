@@ -1,0 +1,65 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+.uv-cache/
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.local.yaml
+*.local.yml
+
+# Claude, Codex, and other AI-assistant workspace files
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.codex/
+AGENTS.md
+.agents/
+.cursor/
+.cursorignore
+.cursorrules
+.aider*
+.continue/
+.windsurf/
+.windsurfrules
+GEMINI.md
+.github/copilot-instructions.md
+.ai/
+ai-notes/
+*.claude
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Data, model caches, and experiment artifacts
+data/
+cache/
+runs/
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+
+# Generated predictions and logs
+predictions.json
+predictions_detailed.json
+*.log
