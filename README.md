@@ -98,6 +98,7 @@ src/provenance/evaluate.py             AUC, bpp baseline, and stratified metrics
 src/provenance/fuse.py                 P8 placeholder
 src/provenance/calibrate.py            P10 placeholder
 scripts/                               Data, manifest, cache, and cluster helpers
+scripts/preflight_train.py             Data, device, disk, and cache validation
 notebooks/01_confound_demo.ipynb       Executed confound demonstration
 predict.py                             CPU-safe submission interface; currently a stub
 tests/                                 Unit, leakage, and end-to-end smoke tests
@@ -206,6 +207,14 @@ The probe reads dimensions and JPEG headers on the raw path without decoding pix
 
 ## Cache frozen CLIP features
 
+Run the training preflight first:
+
+```bash
+uv run python scripts/preflight_train.py
+```
+
+It validates manifests, eval isolation, both binary classes, image paths, matched validation, compatible cache coverage, and available disk. Cluster jobs add `--require-cuda`; CLIP jobs also add `--require-cache`.
+
 Start with a dry run to inspect image count and disk requirements:
 
 ```bash
@@ -285,6 +294,8 @@ Enable **SoC Compute Cluster** in My SoC Services, connect to the SoC network or
 ssh <soc-userid>@xlogin.comp.nus.edu.sg
 ```
 
+Git does not transfer `data/`, `cache/`, or `runs/`; all three are intentionally ignored. On a fresh cluster clone, run the SID_Set download, extraction, and manifest commands from **Data setup** before submitting jobs. Build the 22–24 GiB CLIP token cache on the cluster rather than copying a partial local cache.
+
 Do not train on the login node. Request a GPU allocation using the current options documented by SoC; a typical interactive request is:
 
 ```bash
@@ -293,6 +304,15 @@ srun --pty bash
 ```
 
 Inside the allocation, activate `tmux`, enter the repository, run `uv sync --all-groups`, cache CLIP features, and launch the full training command above. Use `gpu` for jobs up to three hours and `gpu-long` for longer runs. Cluster GPU types and resource syntax can change, so confirm them with `sinfo` and the current SoC GPU documentation before submission.
+
+The repository also includes complete non-interactive jobs:
+
+```bash
+sbatch scripts/slurm_cache.sbatch
+sbatch --export=ALL,BRANCH_MODE=both,RUN_TAG=p7-both-kl1 scripts/slurm_train.sbatch
+```
+
+Set `BRANCH_MODE` to `clip`, `srm`, or `both`. Other supported environment overrides are `BATCH_SIZE`, `EPOCHS`, `PATIENCE`, `LAMBDA_CONSISTENCY`, `EARLY_STOP_METRIC`, `LIMIT`, `RUN_TAG`, and `OUT_DIR`. `LIMIT` is intended only for balanced smoke runs.
 
 ## Evaluation controls
 

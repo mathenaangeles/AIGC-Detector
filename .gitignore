@@ -63,3 +63,4 @@ runs/
 predictions.json
 predictions_detailed.json
 *.log
+aigc-*.out
