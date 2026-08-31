@@ -9,7 +9,9 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Slurm executes a spooled copy under /var/lib/slurm/slurmd, so BASH_SOURCE
+# does not point into the repository inside a submitted job.
+PROJECT_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$PROJECT_ROOT"
 
 export PATH="$HOME/.local/bin:$PATH"
