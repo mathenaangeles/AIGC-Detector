@@ -5,7 +5,11 @@ description = "Robust AI-generated image detection using camera-pipeline evidenc
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "torch>=2.4",
+    # Pin the CUDA generation used by the NUS SoC cluster. Unbounded PyPI
+    # resolution currently selects CUDA 13 on Linux, but the cluster driver is
+    # CUDA 12.9 and cannot load that build.
+    "torch==2.8.0",
+    "torchvision==0.23.0",
     "open_clip_torch>=2.24",
     "timm>=1.0",
     "pillow>=10.0",
@@ -14,6 +18,19 @@ dependencies = [
     "omegaconf>=2.3",
     "tqdm>=4.66",
 ]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [dependency-groups]
 dev = [
