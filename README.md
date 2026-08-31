@@ -284,7 +284,7 @@ uv run python -m provenance.train \
   --branches clip,srm \
   --device cuda \
   --gating \
-  --init_checkpoint runs/p7-both-kl0/model.pt \
+  --init_checkpoint runs/p7-both-kl1/model.pt \
   --freeze_branches \
   --epochs 4 \
   --patience 2 \
