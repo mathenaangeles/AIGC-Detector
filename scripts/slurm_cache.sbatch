@@ -12,6 +12,10 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+export PATH="$HOME/.local/bin:$PATH"
+export TMPDIR="${TMPDIR:-$PROJECT_ROOT/.tmp}"
+mkdir -p "$TMPDIR"
+
 command -v uv >/dev/null || { echo "uv is not available on the compute node" >&2; exit 1; }
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
