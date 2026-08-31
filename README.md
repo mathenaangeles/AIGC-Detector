@@ -366,10 +366,10 @@ CLI overrides are written into each run's config snapshot.
 
 ## Roadmap
 
-- **P8:** degradation-aware gated fusion
-- **P9:** checkpoint-driven clean/transformation evaluation grid and robustness report
-- **P10:** multi-crop CPU inference, TTA stability, and temperature calibration
-- **P11:** qualitative false-positive/false-negative analysis
+- degradation-aware gated fusion
+- heckpoint-driven clean/transformation evaluation grid and robustness report
+- multi-crop CPU inference, TTA stability, and temperature calibration
+- qualitative false-positive/false-negative analysis
 
 ## References
 
