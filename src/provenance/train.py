@@ -82,6 +82,13 @@ def to_image(tensor):
     return Image.fromarray(arr, mode="RGB")
 
 
+def amp_dtype(device):
+    """Use BF16 where CUDA supports it; SRM residuals can overflow FP16."""
+    if device.type == "cuda" and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return torch.float16
+
+
 class CropDataset(Dataset):
     """Deterministic native-resolution crops, plus the cache key naming each one.
 
@@ -200,7 +207,7 @@ def score_split(model, loader, device, cache=None, amp=False):
     for pixels, y, keys, row_index in loader:
         pixels = pixels.to(device, non_blocking=True)
         tokens = cached_tokens(cache, keys, device) if cache else None
-        with torch.autocast(device_type=device.type, enabled=amp):
+        with torch.autocast(device_type=device.type, enabled=amp, dtype=amp_dtype(device)):
             probs = torch.softmax(model(pixels, tokens).float(), dim=-1)[:, 1]
         for p, label, index in zip(probs.cpu().numpy(), y.numpy(), row_index.numpy()):
             sums[int(index)] = sums.get(int(index), 0.0) + float(p)
@@ -349,9 +356,11 @@ def main():
     torch.manual_seed(seed)
     np.random.seed(seed)
     device = resolve_device(args.device)
-    # AMP's GradScaler and fp16 autocast are CUDA facilities; on CPU and MPS
-    # enabling it either no-ops or silently degrades, so it is reported, not assumed.
+    # Mixed precision is CUDA-only here. BF16 is preferred on supported GPUs:
+    # the unclamped SRM residuals can overflow FP16 before gradient scaling can
+    # protect the optimiser or BatchNorm running statistics.
     amp = bool(cfg.train.amp) and not args.no_amp and device.type == "cuda"
+    mixed_dtype = amp_dtype(device)
 
     train_loader, val_loader, matched_loader, train_rows, val_rows, matched_rows = \
         build_loaders(cfg, args)
@@ -378,7 +387,9 @@ def main():
           f"{len(val_rows)} val, {len(matched_rows)} val_matched")
     print(f"loss       CE(clean) + CE(T) + {float(cfg.train.lambda_consistency)} * KL"
           + ("  [detached]" if bool(cfg.train.get("consistency_detach", False)) else ""))
-    print(f"device     {device}   amp {amp}   seed {seed}")
+    print(f"device     {device}   amp {amp}"
+          + (f" ({str(mixed_dtype).removeprefix('torch.')})" if amp else "")
+          + f"   seed {seed}")
     print(f"select     {args.early_stop_metric}, patience {args.patience}\n")
 
     print("computing bpp for the held-out splits", flush=True)
@@ -392,7 +403,9 @@ def main():
     epochs = int(cfg.train.epochs)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimiser, T_max=max(1, epochs * len(train_loader)))
-    scaler = torch.amp.GradScaler(device.type, enabled=amp)
+    # BF16 has FP32-like exponent range and does not need gradient scaling.
+    scaler = torch.amp.GradScaler(
+        device.type, enabled=amp and mixed_dtype == torch.float16)
     lam = float(cfg.train.lambda_consistency)
     detach = bool(cfg.train.get("consistency_detach", False))
     size = int(cfg.data.crop_size)
@@ -413,7 +426,7 @@ def main():
             pixels, y = pixels.to(device, non_blocking=True), y.to(device, non_blocking=True)
             tokens = cached_tokens(cache, keys, device) if cache else None
 
-            with torch.autocast(device_type=device.type, enabled=amp):
+            with torch.autocast(device_type=device.type, enabled=amp, dtype=mixed_dtype):
                 clean_logits = model(pixels, tokens)
                 trans_logits = model(transformed)
                 ce_clean = F.cross_entropy(clean_logits, y)
@@ -484,6 +497,7 @@ def main():
 
     result = {
         "seed": seed, "branches": names, "device": str(device), "amp": amp,
+        "amp_dtype": str(mixed_dtype).removeprefix("torch.") if amp else None,
         "early_stop_metric": args.early_stop_metric, "patience": int(args.patience),
         "epochs_run": len(history), "epochs_configured": epochs,
         "n_trainable": n_trainable, "n_total_params": n_total,
