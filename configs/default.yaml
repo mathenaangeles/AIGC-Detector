@@ -117,6 +117,7 @@ model:
     enabled: false
     n_bands: 32
   gating:
+    enabled: false
     hidden: 64
 
 train:

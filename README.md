@@ -8,7 +8,7 @@ AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector
 2. a bias-matched evaluation protocol that removes those shortcuts; and
 3. a detector built around camera-pipeline evidence, trained with transformation consistency.
 
-> **Current status: The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, and joint training loop are implemented and tested. Degradation-aware fusion, the complete robustness-grid runner, and trained-weight inference are TBD.
+> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, and degradation-aware fusion are implemented and tested. The complete robustness-grid runner and trained-weight inference are TBD.
 
 ## Project Contribution
 
@@ -62,7 +62,7 @@ The traditional truncated-linear-unit threshold is implemented but disabled by d
 
 ### Fusion and objective
 
-Selected branches train together. P7 currently combines their logits with learned global softmax weights. P8 will replace this with a per-image degradation-aware gate conditioned on blur, JPEG, and image-size estimates.
+Selected branches train together. The P7 control combines their logits with learned global softmax weights. P8 enables a per-image gate conditioned only on three cheap, content-light measurements: Laplacian variance for sharpness, an 8×8 blockiness-derived JPEG-quality proxy, and source image size. A two-layer MLP maps those measurements to softmax branch weights. The gate can warm-start from a P7 checkpoint and train with both forensic branches frozen.
 
 One degradation specification is sampled per batch and replayed at the same strength for every crop. The consistency KL is optimized jointly with clean and transformed cross-entropy:
 
@@ -80,9 +80,10 @@ L = CE(f(I), y) + CE(f(T(I)), y) + λ · KL(f(I) || f(T(I)))
 | Attention-probe head | 1,447,682 | Yes |
 | SRM residual CNN | 4,554,754 | Yes |
 | Two-branch fusion weights | 2 | Yes |
+| Degradation-aware gate | 392 | P8 only |
 | **Current two-branch total** | **~309.9M** | **~6.0M** |
 
-The model is comfortably below the competition's 2B-parameter limit. The optional spectral head and degradation-aware gate are not included in the current count because they are not yet active.
+The model is comfortably below the competition's 2B-parameter limit. Enabling P8 adds only the 392-parameter gate shown above. The optional spectral head is not included because it remains inactive.
 
 ## Repository layout
 
@@ -95,7 +96,7 @@ src/provenance/branches/clip_probe.py  Frozen CLIP, attention probe, token cache
 src/provenance/branches/srm.py         Fixed SRM bank and residual CNN
 src/provenance/train.py                P7 joint consistency trainer
 src/provenance/evaluate.py             AUC, bpp baseline, and stratified metrics
-src/provenance/fuse.py                 P8 placeholder
+src/provenance/fuse.py                 Degradation estimates and per-image softmax gate
 src/provenance/calibrate.py            P10 placeholder
 scripts/                               Data, manifest, cache, and cluster helpers
 scripts/preflight_train.py             Data, device, disk, and cache validation
@@ -275,6 +276,24 @@ Useful overrides include:
 --out PATH
 ```
 
+Train the P8 gate from a completed two-branch P7 checkpoint while keeping both
+forensic branches fixed:
+
+```bash
+uv run python -m provenance.train \
+  --branches clip,srm \
+  --device cuda \
+  --gating \
+  --init_checkpoint runs/p7-both-kl0/model.pt \
+  --freeze_branches \
+  --epochs 4 \
+  --patience 2 \
+  --out runs/p8-gated
+```
+
+This preserves the P7 detector and isolates the gain from conditional fusion.
+Omit `--freeze_branches` only for a deliberate joint-fine-tuning experiment.
+
 Every run writes:
 
 ```text
@@ -312,7 +331,7 @@ sbatch scripts/slurm_cache.sbatch
 sbatch --export=ALL,BRANCH_MODE=both,RUN_TAG=p7-both-kl1 scripts/slurm_train.sbatch
 ```
 
-Set `BRANCH_MODE` to `clip`, `srm`, or `both`. Other supported environment overrides are `BATCH_SIZE`, `EPOCHS`, `PATIENCE`, `LAMBDA_CONSISTENCY`, `EARLY_STOP_METRIC`, `LIMIT`, `RUN_TAG`, and `OUT_DIR`. `LIMIT` is intended only for balanced smoke runs.
+Set `BRANCH_MODE` to `clip`, `srm`, or `both`. Other supported environment overrides are `BATCH_SIZE`, `EPOCHS`, `PATIENCE`, `LAMBDA_CONSISTENCY`, `EARLY_STOP_METRIC`, `LIMIT`, `RUN_TAG`, and `OUT_DIR`. P8 additionally uses `GATING=1`, `INIT_CHECKPOINT`, and `FREEZE_BRANCHES=1`. `LIMIT` is intended only for balanced smoke runs.
 
 ## Evaluation controls
 
@@ -380,14 +399,13 @@ CLI overrides are written into each run's config snapshot.
 - SID_Set cannot support unseen-generator validation because it has no generator field.
 - The residual bpp signal after bias matching is controlled and reported, not assumed to disappear completely.
 - CLIP token caching speeds the clean pass, but transformed views still require a live frozen-backbone pass.
-- The current learned fusion weights are global rather than degradation-aware.
+- The degradation-aware gate is implemented but still needs its P8 trained checkpoint and P9 robustness ablation.
 - The spectral branch exists only as a placeholder and is disabled.
 - The robustness report, calibrated operating point, real-weight CPU predictor, and Kaggle reproduction notebook remain to be completed in later phases.
 
 ## Roadmap
 
-- degradation-aware gated fusion
-- heckpoint-driven clean/transformation evaluation grid and robustness report
+- checkpoint-driven clean/transformation evaluation grid and robustness report
 - multi-crop CPU inference, TTA stability, and temperature calibration
 - qualitative false-positive/false-negative analysis
 

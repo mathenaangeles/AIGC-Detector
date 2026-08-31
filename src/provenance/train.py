@@ -52,6 +52,7 @@ from .branches.clip_probe import (
 )
 from .data import bias_match, load_manifest, reflect_pad_to, row_bpp, select
 from .evaluate import auc, stratified_auc
+from .fuse import build as build_gate
 from .transforms import apply_records, sample_random
 
 BRANCHES = ("clip", "srm")
@@ -123,15 +124,12 @@ class CropDataset(Dataset):
         if self.do_match:
             crop = bias_match(crop, self.quality)
         return (to_tensor(crop), int(row["label"] == 1),
-                f"{row['path']}@{box[0]},{box[1]},{self.size}", index // self.n)
+                f"{row['path']}@{box[0]},{box[1]},{self.size}", index // self.n,
+                torch.tensor([float(row["width"]), float(row["height"])]))
 
 
 class BranchEnsemble(nn.Module):
-    """The selected branches, combined by a learned weight over their logits.
-
-    A plain weighted sum, not the degradation-aware gate the architecture calls
-    for -- that lives in fuse.py and conditions on an estimate of the applied
-    degradation. This is the combination rule the ablations run against.
+    """Selected branches with global P7 or degradation-aware P8 fusion.
 
     The frozen tower is held in a list so nn.Module never sees it: out of
     parameters(), out of state_dict(), out of the optimiser, and out of the
@@ -152,6 +150,10 @@ class BranchEnsemble(nn.Module):
         self.probe = build_probe(cfg) if "clip" in self.names else None
         self.srm = srm_branch.build(cfg) if "srm" in self.names else None
         self.weights = nn.Parameter(torch.zeros(len(self.names)))
+        self.gated = bool(cfg.model.gating.get("enabled", False))
+        if self.gated and len(self.names) < 2:
+            raise ValueError("gating requires at least two selected branches")
+        self.gate = build_gate(cfg, len(self.names)) if self.gated else None
 
     @property
     def backbone(self):
@@ -170,12 +172,27 @@ class BranchEnsemble(nn.Module):
                 out["srm"] = self.srm(pixels)
         return out
 
-    def forward(self, pixels, tokens=None):
+    def fusion_weights(self, pixels, image_sizes=None):
+        if self.gate is not None:
+            return self.gate(pixels, image_sizes)
+        return torch.softmax(self.weights, dim=0).expand(len(pixels), -1)
+
+    def forward(self, pixels, tokens=None, image_sizes=None):
         logits = self.branch_logits(pixels, tokens)
         if len(logits) == 1:
             return next(iter(logits.values()))
-        weights = torch.softmax(self.weights, dim=0)
-        return sum(w * logits[n] for w, n in zip(weights, self.names))
+        weights = self.fusion_weights(pixels, image_sizes)
+        stacked = torch.stack([logits[name] for name in self.names], dim=1)
+        return (weights.unsqueeze(-1) * stacked).sum(dim=1)
+
+    def freeze_branches(self):
+        if self.gate is None:
+            raise ValueError("--freeze_branches requires degradation-aware gating")
+        for module in (self.probe, self.srm):
+            if module is not None:
+                for parameter in module.parameters():
+                    parameter.requires_grad_(False)
+        self.weights.requires_grad_(False)
 
     def n_trainable(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -204,11 +221,13 @@ def score_split(model, loader, device, cache=None, amp=False):
     """P(synthetic) per crop, averaged per image. Returns (scores, labels, row_index)."""
     model.eval()
     sums, counts, labels = {}, {}, {}
-    for pixels, y, keys, row_index in loader:
+    for pixels, y, keys, row_index, image_sizes in loader:
         pixels = pixels.to(device, non_blocking=True)
+        image_sizes = image_sizes.to(device, non_blocking=True)
         tokens = cached_tokens(cache, keys, device) if cache else None
         with torch.autocast(device_type=device.type, enabled=amp, dtype=amp_dtype(device)):
-            probs = torch.softmax(model(pixels, tokens).float(), dim=-1)[:, 1]
+            probs = torch.softmax(
+                model(pixels, tokens, image_sizes=image_sizes).float(), dim=-1)[:, 1]
         for p, label, index in zip(probs.cpu().numpy(), y.numpy(), row_index.numpy()):
             sums[int(index)] = sums.get(int(index), 0.0) + float(p)
             counts[int(index)] = counts.get(int(index), 0) + 1
@@ -343,6 +362,12 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="cap train rows, for smoke tests")
     parser.add_argument("--out", default=None)
     parser.add_argument("--no_amp", action="store_true")
+    parser.add_argument("--gating", action="store_true",
+                        help="enable degradation-aware per-image branch fusion")
+    parser.add_argument("--init_checkpoint", default=None,
+                        help="initialize branch weights from a compatible checkpoint")
+    parser.add_argument("--freeze_branches", action="store_true",
+                        help="train only the gate; requires --gating and --init_checkpoint")
     args = parser.parse_args()
 
     cfg = OmegaConf.load(args.config)
@@ -350,6 +375,10 @@ def main():
                        ("lambda_consistency", args.lambda_consistency)):
         if value is not None:
             cfg.train[key] = value
+    if args.gating:
+        cfg.model.gating.enabled = True
+    if args.freeze_branches and not args.init_checkpoint:
+        parser.error("--freeze_branches requires --init_checkpoint")
 
     names = [n.strip() for n in args.branches.split(",") if n.strip()]
     seed = int(cfg.seed)
@@ -372,8 +401,23 @@ def main():
         assert not any(p.requires_grad for p in backbone.parameters())
     model = BranchEnsemble(cfg, names, backbone=backbone).to(device)
 
+    if args.init_checkpoint:
+        checkpoint = torch.load(args.init_checkpoint, map_location=device, weights_only=True)
+        checkpoint_branches = checkpoint.get("branches")
+        if checkpoint_branches != names:
+            raise ValueError(
+                f"checkpoint branches {checkpoint_branches} do not match requested {names}")
+        incompatible = model.load_state_dict(checkpoint["state_dict"], strict=False)
+        unexpected = list(incompatible.unexpected_keys)
+        missing = [key for key in incompatible.missing_keys if not key.startswith("gate.")]
+        if unexpected or missing:
+            raise ValueError(f"incompatible checkpoint; missing={missing}, unexpected={unexpected}")
+    if args.freeze_branches:
+        model.freeze_branches()
+
     n_trainable = model.n_trainable()
-    n_total = n_trainable + (sum(p.numel() for p in backbone.parameters()) if backbone else 0)
+    n_model = sum(p.numel() for p in model.parameters())
+    n_total = n_model + (sum(p.numel() for p in backbone.parameters()) if backbone else 0)
     if n_total >= PARAM_BUDGET:
         raise ValueError(f"{n_total:,} parameters, budget is under {PARAM_BUDGET:,}")
 
@@ -382,6 +426,10 @@ def main():
     OmegaConf.save(cfg, os.path.join(out_dir, "config.yaml"))
 
     print(f"branches   {','.join(names)}")
+    print(f"fusion     {'degradation-aware gate' if model.gated else 'global softmax'}"
+          + ("  [branches frozen]" if args.freeze_branches else ""))
+    if args.init_checkpoint:
+        print(f"initialise  {args.init_checkpoint}")
     print(f"params     {n_trainable:,} trainable, {n_total:,} total (budget {PARAM_BUDGET:,})")
     print(f"data       {len(train_rows)} train images x {cfg.data.crops_per_image} crops, "
           f"{len(val_rows)} val, {len(matched_rows)} val_matched")
@@ -415,20 +463,26 @@ def main():
 
     for epoch in range(epochs):
         model.train()
+        if args.freeze_branches:
+            if model.probe is not None:
+                model.probe.eval()
+            if model.srm is not None:
+                model.srm.eval()
         if backbone is not None:
             assert not backbone.visual.training, "the frozen tower left eval mode"
         totals, seen = {"loss": 0.0, "ce_clean": 0.0, "ce_trans": 0.0, "kl": 0.0}, 0
 
-        for step, (pixels, y, keys, _) in enumerate(train_loader):
+        for step, (pixels, y, keys, _, image_sizes) in enumerate(train_loader):
             rng = np.random.default_rng([seed, epoch, step])
             _, records = sample_random(to_image(pixels[0]), rng, cfg)
             transformed = transform_batch(pixels, records, rng, size).to(device, non_blocking=True)
             pixels, y = pixels.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            image_sizes = image_sizes.to(device, non_blocking=True)
             tokens = cached_tokens(cache, keys, device) if cache else None
 
             with torch.autocast(device_type=device.type, enabled=amp, dtype=mixed_dtype):
-                clean_logits = model(pixels, tokens)
-                trans_logits = model(transformed)
+                clean_logits = model(pixels, tokens, image_sizes=image_sizes)
+                trans_logits = model(transformed, image_sizes=image_sizes)
                 ce_clean = F.cross_entropy(clean_logits, y)
                 ce_trans = F.cross_entropy(trans_logits, y)
                 kl = consistency_kl(clean_logits, trans_logits, detach=detach)
@@ -483,6 +537,7 @@ def main():
             best, bad_epochs = metrics, 0
             best_state = copy.deepcopy(model.state_dict())
             torch.save({"state_dict": best_state, "branches": names, "epoch": epoch,
+                        "gating": model.gated,
                         "config": OmegaConf.to_container(cfg, resolve=True)},
                        os.path.join(out_dir, "model.pt"))
         else:
@@ -501,6 +556,8 @@ def main():
         "early_stop_metric": args.early_stop_metric, "patience": int(args.patience),
         "epochs_run": len(history), "epochs_configured": epochs,
         "n_trainable": n_trainable, "n_total_params": n_total,
+        "gating": model.gated, "branches_frozen": bool(args.freeze_branches),
+        "init_checkpoint": args.init_checkpoint,
         "lambda_consistency": lam, "consistency_detach": detach,
         "used_token_cache": cache is not None,
         "n_train_images": len(train_rows), "n_val_images": len(val_rows),

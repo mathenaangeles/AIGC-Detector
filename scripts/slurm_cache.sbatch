@@ -15,7 +15,11 @@ PROJECT_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pw
 cd "$PROJECT_ROOT"
 
 export PATH="$HOME/.local/bin:$PATH"
-export TMPDIR="${TMPDIR:-$PROJECT_ROOT/.tmp}"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  export TMPDIR="${SLURM_TMPDIR:-/tmp/aigc-${USER}-${SLURM_JOB_ID}}"
+else
+  export TMPDIR="${TMPDIR:-$PROJECT_ROOT/.tmp}"
+fi
 mkdir -p "$TMPDIR"
 
 command -v uv >/dev/null || { echo "uv is not available on the compute node" >&2; exit 1; }

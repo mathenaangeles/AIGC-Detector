@@ -15,7 +15,11 @@ PROJECT_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pw
 cd "$PROJECT_ROOT"
 
 export PATH="$HOME/.local/bin:$PATH"
-export TMPDIR="${TMPDIR:-$PROJECT_ROOT/.tmp}"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  export TMPDIR="${SLURM_TMPDIR:-/tmp/aigc-${USER}-${SLURM_JOB_ID}}"
+else
+  export TMPDIR="${TMPDIR:-$PROJECT_ROOT/.tmp}"
+fi
 mkdir -p "$TMPDIR"
 
 command -v uv >/dev/null || { echo "uv is not available on the compute node" >&2; exit 1; }
@@ -36,6 +40,9 @@ PATIENCE="${PATIENCE:-3}"
 LAMBDA_CONSISTENCY="${LAMBDA_CONSISTENCY:-1.0}"
 EARLY_STOP_METRIC="${EARLY_STOP_METRIC:-auc_val_matched}"
 LIMIT="${LIMIT:-}"
+GATING="${GATING:-0}"
+INIT_CHECKPOINT="${INIT_CHECKPOINT:-}"
+FREEZE_BRANCHES="${FREEZE_BRANCHES:-0}"
 RUN_TAG="${RUN_TAG:-p7-${BRANCHES//,/-}-${SLURM_JOB_ID:-manual}}"
 OUT_DIR="${OUT_DIR:-$PROJECT_ROOT/runs/$RUN_TAG}"
 
@@ -47,6 +54,9 @@ echo "batch        $BATCH_SIZE"
 echo "epochs       $EPOCHS"
 echo "lambda       $LAMBDA_CONSISTENCY"
 echo "limit        ${LIMIT:-full}"
+echo "gating       $GATING"
+echo "initialise   ${INIT_CHECKPOINT:-from scratch}"
+echo "freeze       $FREEZE_BRANCHES"
 echo "output       $OUT_DIR"
 nvidia-smi
 
@@ -67,5 +77,18 @@ TRAIN_ARGS=(
 )
 if [[ -n "$LIMIT" ]]; then
   TRAIN_ARGS+=(--limit "$LIMIT")
+fi
+if [[ "$GATING" == "1" ]]; then
+  TRAIN_ARGS+=(--gating)
+elif [[ "$GATING" != "0" ]]; then
+  echo "GATING must be 0 or 1" >&2; exit 2
+fi
+if [[ -n "$INIT_CHECKPOINT" ]]; then
+  TRAIN_ARGS+=(--init_checkpoint "$INIT_CHECKPOINT")
+fi
+if [[ "$FREEZE_BRANCHES" == "1" ]]; then
+  TRAIN_ARGS+=(--freeze_branches)
+elif [[ "$FREEZE_BRANCHES" != "0" ]]; then
+  echo "FREEZE_BRANCHES must be 0 or 1" >&2; exit 2
 fi
 uv run --frozen python -m provenance.train "${TRAIN_ARGS[@]}"
