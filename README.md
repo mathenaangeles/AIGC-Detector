@@ -524,11 +524,16 @@ SRM residuals can overflow that format.
 
 The required prediction interface runs with real weights on CPU:
 
+Download the selected checkpoint and its cryptographically bound calibration
+artifact from the
+[`v1.0.0-techjam` release](https://github.com/mathenaangeles/AIGC-Detector/releases/tag/v1.0.0-techjam),
+then run:
+
 ```bash
 uv run python predict.py \
   --image_dir path/to/images \
-  --checkpoint runs/p8-gated-kl1/model.pt \
-  --calibration runs/p8-gated-kl1/calibration.json \
+  --checkpoint aigc-detector-p8-gated-kl1-model.pt \
+  --calibration aigc-detector-p8-gated-kl1-calibration.json \
   --device cpu \
   --out predictions.json
 ```
@@ -640,7 +645,7 @@ CLI overrides are written into each run's config snapshot.
 3. Add more real camera pipelines, social-media recompression chains, screenshots, text-heavy graphics, and minimalist generations—the error sheet shows these tails matter.
 4. Distil or replace ViT-L/14 for lower CPU latency while retaining the SRM branch and stability signal.
 5. Test whether a regularized or supervised gate improves materially; otherwise ship the simpler ungated KL ensemble or CLIP probe selected on external data.
-6. Publish the trained checkpoint and calibration JSON as a versioned release asset and add a fully executed reproduction notebook.
+6. Add a fully executed end-to-end reproduction notebook and publish external-domain checkpoints once they have passed generator-held-out evaluation.
 
 ## Team contribution
 

@@ -53,6 +53,8 @@ Thumbs.db
 data/
 cache/
 runs/
+release-assets/
+aigc-detector-devpost.zip
 *.pt
 *.pth
 *.ckpt
