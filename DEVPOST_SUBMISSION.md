@@ -2,10 +2,6 @@
 
 ## Project Name
 
-**AIGC Detector**
-
-## Official Model Name
-
 **CamTrace-6M**
 
 CamTrace-6M has **6,002,830 learned detector parameters**. Its complete
@@ -14,9 +10,9 @@ ViT-L/14 backbone is included, remaining well below the 2B-parameter limit.
 
 ## Elevator Pitch
 
-CamTrace-6M detects AI-generated images after compression, blur, crops and reposting by fusing semantic and camera-pipeline evidence, reaching 0.99976 mean transformed AUC.
+CamTrace-6M exposes benchmark shortcuts, then fuses semantic and camera-pipeline evidence to detect AI images after compression, blur, cropping, and reposting.
 
-_Character count: 172/200._
+_Character count: 159/200._
 
 ## About the Project
 
@@ -113,6 +109,12 @@ Temperature scaling reduced validation NLL from **0.024487 to 0.020112** and
 selected a threshold of **0.427470**, achieving **100% TPR at 0.88% measured
 FPR** on the balanced calibration set.
 
+The robustness table and deployment calibration use different, intentionally
+separated score paths. The table fixes an **uncalibrated clean-crop threshold
+of 0.307028** for the gated model. Deployment uses overlapping crops, four TTA
+views, and temperature scaling, producing the **calibrated threshold 0.427470**.
+Each threshold is reused only with the protocol that produced it.
+
 These results are supported by five trained ablations, raw and bias-matched
 robustness grids, fixed-threshold accuracy, bpp-stratified metrics, calibration,
 and ranked error analysis committed in the public repository.
@@ -135,7 +137,7 @@ equally reliable.
 ### Technical execution and feasibility
 
 - **Portable contract:** `predict.py --image_dir ... --device cpu` writes the
-  required `[{"image_path": "...", "pred": 0.5}]` JSON using real released
+  required `[{"image_path": "...", "pred": 0.9731}]` JSON using real released
   weights.
 - **Deployment evidence:** CPU inference was validated end-to-end; a detailed
   sidecar adds calibrated decisions, crop/view counts, per-TTA predictions,
@@ -215,6 +217,11 @@ pipeline are already structured to support those extensions.
 - **OpenAI CLIP ViT-L/14 QuickGELU:** frozen pretrained vision backbone loaded
   through OpenCLIP.
 
+SID_Set is used under CC BY 4.0 with attribution and documented transformations.
+COCO and WildFake/DALL·E images are not redistributed. Complete license,
+dataset, model, and modification notices are in
+[`THIRD_PARTY_NOTICES.md`](https://github.com/mathenaangeles/AIGC-Detector/blob/main/THIRD_PARTY_NOTICES.md).
+
 ## Try It Out
 
 - **Public repository and complete README:** https://github.com/mathenaangeles/AIGC-Detector
@@ -222,13 +229,14 @@ pipeline are already structured to support those extensions.
 - **Executed confound demonstration:** https://github.com/mathenaangeles/AIGC-Detector/blob/main/notebooks/01_confound_demo.ipynb
 - **Full robustness table:** https://github.com/mathenaangeles/AIGC-Detector/blob/main/reports/robustness_table.md
 - **Ranked error analysis:** https://github.com/mathenaangeles/AIGC-Detector/blob/main/reports/error_analysis.md
+- **Public three-minute demo:** [PASTE_PUBLIC_YOUTUBE_URL_BEFORE_SUBMISSION]
 
 ## Submission Artifact
 
 Upload `aigc-detector-devpost.zip`:
 
-- Size: **23,746,093 bytes (22.65 MiB)**
-- SHA-256: `a8a9c0863aeff567c803f91a78ac52b7f454b6a1ab23e0bd907b182b9ffd8643`
+- Size: **28,877,702 bytes (27.54 MiB)**
+- SHA-256: `bc9a2c11bb5ed4d673eebd5f25ac631e8b1f229307426d1cdf7f29bae7d84297`
 - Selected model: **CamTrace-6M** (`p8-gated-kl1`)
 - Includes source, configuration, reports, executed notebook, checkpoint, and
   calibration; excludes datasets, caches, environments, and frozen CLIP weights.

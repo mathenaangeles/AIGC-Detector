@@ -2,6 +2,8 @@
 
 Camera-pipeline provenance detection for AI-generated images, designed to remain useful after JPEG compression, blur, resizing, noise, colour changes, and cropping.
 
+[MIT-licensed software](LICENSE) · [third-party and dataset notices](THIRD_PARTY_NOTICES.md)
+
 **Official model: CamTrace-6M.** The name refers to its 6,002,830 learned
 detector parameters; the complete inference graph has 309,969,038 parameters
 when the frozen CLIP ViT-L/14 backbone is included.
@@ -550,7 +552,7 @@ It recursively emits the exact minimal submission contract:
 
 ```json
 [
-  {"image_path": "example.jpg", "pred": 0.5}
+  {"image_path": "example.jpg", "pred": 0.9731}
 ]
 ```
 
@@ -572,6 +574,31 @@ On the SoC cluster, submit calibration non-interactively:
 ```bash
 sbatch scripts/slurm_calibrate.sbatch
 ```
+
+The robustness report's gated threshold (`0.307028`) is an uncalibrated
+clean-crop operating point. The deployment threshold (`0.427470`) is fitted
+after overlapping-crop, four-view TTA and temperature scaling. They are bound
+to different score paths and must not be interchanged.
+
+### Fast judge demo from the uploaded ZIP
+
+The DevPost archive places `model.pt` and `calibration.json` at its root. After
+extracting it, run the included attributed two-image demo:
+
+```bash
+uv sync --all-groups
+uv run python predict.py \
+  --image_dir demo/evaluation_inputs \
+  --checkpoint model.pt \
+  --calibration calibration.json \
+  --device cpu \
+  --out predictions.json
+```
+
+The first run downloads the separately licensed frozen CLIP backbone. No API
+key is required. Expected output shape and recorded demonstration results are
+in `demo/evaluation_predictions.json`; exact probabilities can vary slightly
+across supported floating-point backends.
 
 ## Error analysis
 
@@ -661,6 +688,14 @@ This is a solo implementation. The project author performed the benchmark
 audit, data protocol design, model and training implementation, cluster runs,
 robustness evaluation, calibration, CPU inference validation, and error
 analysis. External libraries and pretrained weights are credited below.
+
+## License and attribution
+
+Original project software is released under the [MIT License](LICENSE).
+Datasets, demonstration images, pretrained weights, and third-party names are
+not relicensed by it. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for
+SID_Set CC BY 4.0 attribution, documented transformations, dataset citations,
+and CLIP/OpenCLIP notices.
 
 ## References
 

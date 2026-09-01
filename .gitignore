@@ -54,6 +54,7 @@ data/
 cache/
 runs/
 release-assets/
+demo/video_build/
 aigc-detector-devpost.zip
 *.pt
 *.pth

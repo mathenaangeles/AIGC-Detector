@@ -1,0 +1,10 @@
+[
+  {
+    "image_path": "sid_real_ccby.jpg",
+    "pred": 4.33513221205607e-06
+  },
+  {
+    "image_path": "sid_synthetic_ccby.png",
+    "pred": 1.0
+  }
+]
