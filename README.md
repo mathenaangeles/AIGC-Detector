@@ -8,7 +8,7 @@ AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector
 2. a bias-matched evaluation protocol that removes those shortcuts; and
 3. a detector built around camera-pipeline evidence, trained with transformation consistency.
 
-> **Measured status:** 195 tests pass (12 environment/data-dependent skips). Five trained ablations, raw and bias-matched robustness grids, calibrated CPU inference, and ranked error analysis are complete. Results below are read directly from [`reports/`](reports/); no placeholder scores remain.
+> **Measured Status:** 195 tests pass (12 environment/data-dependent skips). Five trained ablations, raw and bias-matched robustness grids, calibrated CPU inference, and ranked error analysis are complete. Results below are read directly from [`reports/`](reports/).
 
 ## Project Contribution
 
