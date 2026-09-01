@@ -280,8 +280,11 @@ def aggregate_crops(scores, row_indices, n_rows, mode="trimmed_mean"):
 def score_condition(methods, backbone, loader, device, n_rows, aggregate="trimmed_mean", amp=True):
     crop_scores = {name: [] for name in methods}
     row_indices = []
-    use_amp = bool(amp) and device.type == "cuda"
-    dtype = torch.bfloat16 if use_amp and torch.cuda.is_bf16_supported() else torch.float16
+    # The unclamped SRM branch can overflow FP16. Older CUDA devices without
+    # BF16 support therefore evaluate in FP32 rather than using an unsafe
+    # automatic fallback.
+    use_amp = bool(amp) and device.type == "cuda" and torch.cuda.is_bf16_supported()
+    dtype = torch.bfloat16
     for pixels, _, indices, image_sizes in loader:
         pixels = pixels.to(device, non_blocking=True)
         image_sizes = image_sizes.to(device, non_blocking=True)

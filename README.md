@@ -101,6 +101,7 @@ src/provenance/inference.py            Overlapping crops and four-view TTA infer
 src/provenance/calibrate.py            Temperature scaling and fixed-FPR threshold
 scripts/                               Data, manifest, cache, and cluster helpers
 scripts/preflight_train.py             Data, device, disk, and cache validation
+scripts/error_analysis.py              Ranked errors, grouped evidence, contact sheet
 notebooks/01_confound_demo.ipynb       Executed confound demonstration
 predict.py                             Real-weight CPU submission interface and sidecar
 tests/                                 Unit, leakage, and end-to-end smoke tests
@@ -436,6 +437,38 @@ On the SoC cluster, submit calibration non-interactively:
 ```bash
 sbatch scripts/slurm_calibrate.sbatch
 ```
+
+## Error analysis
+
+P11 re-scores the selected gated checkpoint over the complete 16-condition
+robustness grid. It fixes the decision threshold on clean real scores at 1%
+FPR, ranks the 12 most confident false positives and 12 false negatives, and
+writes a labelled contact sheet plus measured group summaries:
+
+```bash
+uv run python scripts/error_analysis.py \
+  --checkpoint runs/p8-gated-kl1/model.pt \
+  --protocol bias_matched \
+  --device cuda
+```
+
+Outputs are `reports/error_analysis.md`, `reports/error_analysis.json`, and
+`reports/error_contact_sheet.png`. Counts and error rates are grouped by
+transform family, source, and generator where the manifest genuinely carries
+generator metadata. SID_Set has no generator field, so its generated images are
+reported as `unknown` rather than assigned a fabricated generator.
+
+On Slurm:
+
+```bash
+sbatch scripts/slurm_error_analysis.sbatch
+```
+
+Generated Markdown, JSON, and contact-sheet files under `reports/` are intended
+to be committed. Raw datasets, CLIP caches, checkpoints, Slurm logs, smoke-test
+predictions, and `runs/` remain ignored. The deployment calibration JSON stays
+beside its ignored checkpoint and should be packaged with that checkpoint for
+submission rather than committed as a benchmark result.
 
 ## Tests
 
