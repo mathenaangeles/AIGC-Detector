@@ -8,7 +8,7 @@ AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector
 2. a bias-matched evaluation protocol that removes those shortcuts; and
 3. a detector built around camera-pipeline evidence, trained with transformation consistency.
 
-> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, degradation-aware fusion, and checkpoint-driven robustness grid are implemented and tested. Real-weight inference remains P10 work.
+> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, degradation-aware fusion, checkpoint-driven robustness grid, temperature calibration, and real-weight CPU inference are implemented and tested.
 
 ## Project Contribution
 
@@ -97,11 +97,12 @@ src/provenance/branches/srm.py         Fixed SRM bank and residual CNN
 src/provenance/train.py                P7 joint consistency trainer
 src/provenance/evaluate.py             Checkpoint robustness grid and controlled metrics
 src/provenance/fuse.py                 Degradation estimates and per-image softmax gate
-src/provenance/calibrate.py            P10 placeholder
+src/provenance/inference.py            Overlapping crops and four-view TTA inference
+src/provenance/calibrate.py            Temperature scaling and fixed-FPR threshold
 scripts/                               Data, manifest, cache, and cluster helpers
 scripts/preflight_train.py             Data, device, disk, and cache validation
 notebooks/01_confound_demo.ipynb       Executed confound demonstration
-predict.py                             CPU-safe submission interface; currently a stub
+predict.py                             Real-weight CPU submission interface and sidecar
 tests/                                 Unit, leakage, and end-to-end smoke tests
 ```
 
@@ -111,7 +112,7 @@ tests/                                 Unit, leakage, and end-to-end smoke tests
 - [`uv`](https://docs.astral.sh/uv/)
 - Enough local disk for the selected datasets and feature cache
 - A CUDA GPU for practical CLIP feature caching and full training
-- CPU-only execution for tests, SRM smoke runs, and the current `predict.py` interface
+- CPU-only execution for tests, SRM smoke runs, and the required `predict.py` path
 
 Install the locked environment:
 
@@ -378,13 +379,36 @@ directory name. Use `LIMIT=20` only for a balanced smoke test.
 
 ## Inference contract
 
-The required interface already runs on bare CPU Python:
+First calibrate the selected gated checkpoint. The calibration pass uses the
+same overlapping crop grid, four TTA views, trimmed-mean aggregation, and
+bias-matched protocol as deployment:
 
 ```bash
-python predict.py --image_dir path/to/images --out predictions.json
+uv run python -m provenance.calibrate \
+  --checkpoint runs/p8-gated-kl1/model.pt \
+  --protocol bias_matched \
+  --device cuda \
+  --out runs/p8-gated-kl1/calibration.json \
+  --report reports/calibration.md
 ```
 
-It recursively emits:
+It fits one positive temperature by image-level NLL and reports the calibrated
+threshold whose clean-real false-positive rate is at most 1%. The JSON artifact
+is cryptographically bound to the checkpoint and records the protocol, crop
+grid, aggregation, and TTA settings.
+
+The required prediction interface runs with real weights on CPU:
+
+```bash
+uv run python predict.py \
+  --image_dir path/to/images \
+  --checkpoint runs/p8-gated-kl1/model.pt \
+  --calibration runs/p8-gated-kl1/calibration.json \
+  --device cpu \
+  --out predictions.json
+```
+
+It recursively emits the exact minimal submission contract:
 
 ```json
 [
@@ -392,7 +416,24 @@ It recursively emits:
 ]
 ```
 
-**Current limitation:** `predict.py` is still the P1 safety stub and returns `0.5` for every image. Loading trained weights, overlapping multi-crop inference, transformation-time augmentation, calibration, and stability reporting are scheduled for P10. The stub status is printed to stderr so it cannot be mistaken for model output.
+It also writes `predictions_detailed.json` beside the requested output. Each
+detailed row includes the calibrated decision, number of crops and views,
+per-TTA predictions, and `stability`: the population variance across all crop
+and TTA probabilities. Lower stability variance means the prediction is less
+sensitive to crop location and deployment degradation.
+
+Inference uses a deterministic 50%-overlap grid capped at eight crops, then
+applies `{identity, jpeg90, resize0.5, crop80}` to every crop. Probabilities are
+temperature-scaled and aggregated with a trimmed mean. `--protocol
+bias_matched` is the default because it matches training and the primary P9
+evaluation; raw inference is available explicitly but cannot reuse a
+bias-matched calibration artifact.
+
+On the SoC cluster, submit calibration non-interactively:
+
+```bash
+sbatch scripts/slurm_calibrate.sbatch
+```
 
 ## Tests
 
@@ -402,7 +443,7 @@ Run the complete suite:
 uv run pytest -q
 ```
 
-The suite covers transform determinism, native-resolution crops, manifest stability, eval leakage in both directions, CLIP cache compatibility, the fixed SRM bank, the confound probe, bpp matching, loss gradients, and an end-to-end SRM-only training run that verifies checkpoint and metrics output.
+The suite covers transform determinism, native-resolution crops, manifest stability, eval leakage in both directions, CLIP cache compatibility, the fixed SRM bank, the confound probe, bpp matching, loss gradients, training checkpoints, robustness reports, overlapping inference crops, TTA aggregation, calibration binding, and the minimal prediction contract.
 
 ## Configuration
 
@@ -431,13 +472,14 @@ CLI overrides are written into each run's config snapshot.
 - CLIP token caching speeds the clean pass, but transformed views still require a live frozen-backbone pass.
 - The degradation-aware gate and robustness runner are implemented; the generated P9 report must be copied from the training cluster before its numbers can be documented here.
 - The spectral branch exists only as a placeholder and is disabled.
-- Real-weight CPU inference, calibration, and the Kaggle reproduction notebook remain to be completed in later phases.
+- The calibration split is also used for model selection because no third labelled split is currently available; external held-out evaluation remains necessary.
+- The Kaggle reproduction notebook and qualitative error analysis remain to be completed.
 
 ## Roadmap
 
 - populate and interpret the checkpoint-driven robustness report
-- multi-crop CPU inference, TTA stability, and temperature calibration
 - qualitative false-positive/false-negative analysis
+- package the selected checkpoint, calibration artifact, and reproduction notebook
 
 ## References
 

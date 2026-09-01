@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""AIGC Detector inference entry point.
+"""AIGC Detector real-checkpoint inference entry point.
 
 Contract (graded deliverable):
     python predict.py --image_dir DIR [--out predictions.json]
     -> JSON array of {"image_path": str, "pred": float}
        where pred is P(AI-generated), in [0, 1].
 
-Must run on CPU. This file deliberately imports only the standard library so it
-keeps working before `uv sync`, on a judge's bare Python, and while the model
-code underneath it is being rewritten. When real weights land, gate the model
-import inside predict_paths() and flip STUB.
+The model path uses overlapping crops and four transformation-time-augmentation
+views per crop. The required JSON remains deliberately minimal; crop/TTA
+variance and the calibrated operating-point decision go to a detailed sidecar.
 """
 
 import argparse
@@ -17,9 +16,8 @@ import json
 import os
 import sys
 
-STUB = True
-
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+DEFAULT_CHECKPOINT = "runs/p8-gated-kl1/model.pt"
 
 
 def find_images(image_dir):
@@ -43,15 +41,38 @@ def format_path(path, image_dir, mode):
     return os.path.relpath(path, image_dir)
 
 
-def predict_paths(paths):
-    """Return P(AI-generated) per path. Stub: uninformative 0.5 for every image."""
-    return [0.5 for _ in paths]
+def predict_paths(paths, checkpoint=DEFAULT_CHECKPOINT, calibration=None, device="cpu",
+                  protocol="bias_matched", batch_size=4, max_crops=8,
+                  overlap=0.5, num_workers=0):
+    """Return detailed real-model predictions in the input path order."""
+    from provenance.inference import CheckpointPredictor
+
+    predictor = CheckpointPredictor(
+        checkpoint, device=device, calibration=calibration, protocol=protocol)
+    return predictor.predict_paths(
+        list(paths), batch_size=batch_size, max_crops=max_crops,
+        overlap=overlap, num_workers=num_workers)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Predict P(AI-generated) for a directory of images.")
     parser.add_argument("--image_dir", required=True, help="Directory of images, searched recursively.")
     parser.add_argument("--out", default="predictions.json", help="Output JSON path.")
+    parser.add_argument("--detailed_out", default=None,
+                        help="Detailed sidecar; defaults to predictions_detailed.json beside --out.")
+    parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT)
+    parser.add_argument(
+        "--calibration", default="auto",
+        help="Calibration JSON, 'auto' for one beside the checkpoint, or 'none'.",
+    )
+    parser.add_argument("--device", default="cpu",
+                        help="Inference device. The required portable path is --device cpu.")
+    parser.add_argument("--protocol", choices=("raw", "bias_matched"),
+                        default="bias_matched")
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--max_crops", type=int, default=8)
+    parser.add_argument("--overlap", type=float, default=0.5)
+    parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument(
         "--path_mode",
         default="relative",
@@ -62,15 +83,41 @@ def main(argv=None):
 
     if not os.path.isdir(args.image_dir):
         parser.error(f"--image_dir is not a directory: {args.image_dir}")
+    if args.batch_size < 1 or args.max_crops < 1 or args.num_workers < 0:
+        parser.error("batch_size and max_crops must be positive; num_workers cannot be negative")
+    if not 0.0 <= args.overlap < 1.0:
+        parser.error("overlap must be in [0, 1)")
+    if not os.path.isfile(args.checkpoint):
+        parser.error(f"checkpoint not found: {args.checkpoint}")
 
     paths = find_images(args.image_dir)
     if not paths:
         parser.error(f"no images found under {args.image_dir} (looked for {sorted(IMAGE_EXTENSIONS)})")
 
-    preds = predict_paths(paths)
+    if args.calibration == "auto":
+        candidate = os.path.join(os.path.dirname(os.path.abspath(args.checkpoint)),
+                                 "calibration.json")
+        calibration = candidate if os.path.isfile(candidate) else None
+    elif args.calibration.lower() == "none":
+        calibration = None
+    else:
+        calibration = args.calibration
+        if not os.path.isfile(calibration):
+            parser.error(f"calibration not found: {calibration}")
+
+    details = predict_paths(
+        paths, checkpoint=args.checkpoint, calibration=calibration,
+        device=args.device, protocol=args.protocol, batch_size=args.batch_size,
+        max_crops=args.max_crops, overlap=args.overlap,
+        num_workers=args.num_workers)
     records = [
-        {"image_path": format_path(p, args.image_dir, args.path_mode), "pred": float(s)}
-        for p, s in zip(paths, preds)
+        {"image_path": format_path(path, args.image_dir, args.path_mode),
+         "pred": float(detail["pred"])}
+        for path, detail in zip(paths, details)
+    ]
+    detailed_records = [
+        {"image_path": record["image_path"], **detail}
+        for record, detail in zip(records, details)
     ]
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
@@ -78,8 +125,15 @@ def main(argv=None):
     with open(args.out, "w") as f:
         json.dump(records, f, indent=2)
 
-    banner = " [STUB: constant 0.5, not a trained model]" if STUB else ""
-    print(f"wrote {len(records)} predictions to {args.out}{banner}", file=sys.stderr)
+    detailed_out = args.detailed_out or os.path.join(
+        out_dir, "predictions_detailed.json")
+    os.makedirs(os.path.dirname(os.path.abspath(detailed_out)), exist_ok=True)
+    with open(detailed_out, "w") as f:
+        json.dump(detailed_records, f, indent=2)
+
+    calibration_note = f"calibrated with {calibration}" if calibration else "uncalibrated"
+    print(f"wrote {len(records)} predictions to {args.out}", file=sys.stderr)
+    print(f"wrote stability details to {detailed_out} ({calibration_note})", file=sys.stderr)
     return 0
 
 
