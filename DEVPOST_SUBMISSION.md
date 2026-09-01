@@ -207,6 +207,14 @@ pipeline are already structured to support those extensions.
 | Compute | NUS SoC Slurm, NVIDIA H100 NVL, CUDA 12.8; TITAN V FP32 calibration |
 | Quality | pytest, deterministic tests, leakage and checkpoint-contract tests |
 
+## Built With
+
+Use these **15 tags** in DevPost's “Built with” field:
+
+`python`, `pytorch`, `openclip`, `clip`, `torchvision`, `scikit-learn`,
+`numpy`, `pillow`, `jupyter`, `hugging-face`, `cuda`, `slurm`, `uv`, `pytest`,
+`github`
+
 ## Datasets and Assets Used
 
 - **SID_Set:** binary detector training and controlled validation.
