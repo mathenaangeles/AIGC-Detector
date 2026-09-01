@@ -2,6 +2,10 @@
 
 Camera-pipeline provenance detection for AI-generated images, designed to remain useful after JPEG compression, blur, resizing, noise, colour changes, and cropping.
 
+**Official model: CamTrace-6M.** The name refers to its 6,002,830 learned
+detector parameters; the complete inference graph has 309,969,038 parameters
+when the frozen CLIP ViT-L/14 backbone is included.
+
 AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector can score well by learning how the datasets were saved instead of whether an image was generated. The project therefore combines three things:
 
 1. a content-blind probe that measures encoder and file-format shortcuts;
@@ -167,6 +171,10 @@ L = CE(f(I), y) + CE(f(T(I)), y) + λ · KL(f(I) || f(T(I)))
 | **Gated model total** | **309,969,038** | **392 in P8; 6,002,438 in P7** |
 
 The model is comfortably below the competition's 2B-parameter limit. Enabling P8 adds only the 392-parameter gate shown above. The optional spectral head is not included because it remains inactive.
+
+`CamTrace-6M` counts the learned attention probe, SRM CNN, global fusion, and
+degradation gate. It does not imply that the frozen CLIP backbone has only six
+million parameters.
 
 ## Repository layout
 

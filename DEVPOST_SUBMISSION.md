@@ -4,9 +4,17 @@
 
 **AIGC Detector**
 
+## Official Model Name
+
+**CamTrace-6M**
+
+The `6M` denotes **6,002,830 learned detector parameters**. The full inference
+graph contains **309,969,038 parameters** once the frozen CLIP ViT-L/14
+backbone is counted.
+
 ## Description
 
-AIGC Detector is a shortcut-aware AI-image detector that fuses a frozen CLIP attention probe with camera-pipeline residual evidence. On a controlled 904-image validation split it achieved **0.999760 mean ROC AUC across 15 degraded conditions**, with a calibrated threshold of **0.427470** at **0.88% observed FPR**.
+**CamTrace-6M** powers AIGC Detector by fusing a frozen CLIP attention probe with camera-pipeline residual evidence. On a controlled 904-image validation split it achieved **0.999760 mean ROC AUC across 15 degraded conditions**, with a calibrated threshold of **0.427470** at **0.88% observed FPR**.
 
 ## About the project
 
@@ -18,7 +26,7 @@ We tested that hypothesis before training the model. A content-blind logistic-re
 
 ### What it does
 
-AIGC Detector returns a calibrated probability that an image is AI-generated. It combines two complementary views:
+CamTrace-6M returns a calibrated probability that an image is AI-generated. It combines two complementary views:
 
 1. A frozen OpenAI CLIP ViT-L/14 vision encoder provides broad content representations. A small trainable attention probe reads its patch tokens.
 2. A fixed 30-filter Spatial Rich Model (SRM) bank exposes high-frequency residuals associated with acquisition and rendering pipelines. A compact CNN learns spatial statistics from the resulting 90 residual maps.
@@ -50,7 +58,7 @@ The matched set makes the direction-normalized bpp-only baseline nearly random: 
 
 ### Results
 
-These are the measured values for the released `p8-gated-kl1` checkpoint. The primary controlled protocol contains 904 images (452 real and 452 synthetic), uses eight crops per image, and passes both classes through the same JPEG pipeline before scoring. Values marked “not measured” were not produced by the completed experiment and are stated explicitly instead of being inferred or fabricated.
+These are the measured values for the released CamTrace-6M checkpoint (`p8-gated-kl1`). The primary controlled protocol contains 904 images (452 real and 452 synthetic), uses eight crops per image, and passes both classes through the same JPEG pipeline before scoring. Values marked “not measured” were not produced by the completed experiment and are stated explicitly instead of being inferred or fabricated.
 
 | Evaluation | Result |
 |---|---:|
@@ -167,8 +175,8 @@ The archive excludes datasets, the 24.1 GiB CLIP feature cache, raw run director
 
 Final archive verification:
 
-- Archive size: `23,739,719 bytes` (`22.64 MiB`)
-- SHA-256: `9fd5624015f02a310cc9c3d38751698a32c748b9c8c3588d9ed480da9a6ea888`
+- Archive size: `23,746,093 bytes` (`22.65 MiB`)
+- SHA-256: `a8a9c0863aeff567c803f91a78ac52b7f454b6a1ab23e0bd907b182b9ffd8643`
 - Selected checkpoint/run: `p8-gated-kl1`
 
 ## Which Problem Statement did your team choose?
