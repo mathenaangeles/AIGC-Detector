@@ -27,7 +27,9 @@ export TORCH_HOME="${TORCH_HOME:-$PROJECT_ROOT/cache/torch}"
 
 CHECKPOINT="${CHECKPOINT:-runs/p8-gated-kl1/model.pt}"
 PROTOCOL="${PROTOCOL:-bias_matched}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
+# Four fits ViT-L/14 plus the two lightweight heads in FP32 on 12 GiB GPUs.
+# BF16-capable GPUs can safely override this upward at submission time.
+BATCH_SIZE="${BATCH_SIZE:-4}"
 MAX_CROPS="${MAX_CROPS:-8}"
 OVERLAP="${OVERLAP:-0.5}"
 LIMIT="${LIMIT:-}"

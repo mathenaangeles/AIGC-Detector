@@ -395,7 +395,9 @@ uv run python -m provenance.calibrate \
 It fits one positive temperature by image-level NLL and reports the calibrated
 threshold whose clean-real false-positive rate is at most 1%. The JSON artifact
 is cryptographically bound to the checkpoint and records the protocol, crop
-grid, aggregation, and TTA settings.
+grid, aggregation, and TTA settings. Inference uses BF16 on supported CUDA
+devices and FP32 on older GPUs; it never falls back to FP16 because unclamped
+SRM residuals can overflow that format.
 
 The required prediction interface runs with real weights on CPU:
 

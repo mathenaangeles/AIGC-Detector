@@ -105,7 +105,7 @@ def main():
     parser.add_argument("--split", default=None,
                         help="override raw=val or bias_matched=val_matched")
     parser.add_argument("--device", default="auto")
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--max_crops", type=int, default=8)
     parser.add_argument("--overlap", type=float, default=0.5)
     parser.add_argument("--num_workers", type=int, default=0)

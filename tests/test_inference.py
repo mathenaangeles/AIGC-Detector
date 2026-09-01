@@ -14,6 +14,7 @@ from provenance.inference import (
     checkpoint_sha256,
     overlapping_crop_boxes,
     prediction_from_margins,
+    safe_amp_dtype,
     trimmed_mean,
 )
 from provenance.train import BranchEnsemble
@@ -97,6 +98,14 @@ def test_checkpoint_predictor_runs_real_cpu_multicrop_tta(tmp_path):
     assert set(result["tta_predictions"]) == set(TTA_NAMES)
 
 
+def test_old_cuda_devices_do_not_enable_unsafe_fp16(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: False)
+    assert safe_amp_dtype(torch.device("cuda")) is None
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    assert safe_amp_dtype(torch.device("cuda")) == torch.bfloat16
+    assert safe_amp_dtype(torch.device("cpu")) is None
+
+
 def test_calibration_is_bound_to_checkpoint_protocol_and_crop_grid(tmp_path):
     checkpoint = make_srm_checkpoint(tmp_path)
     calibration = tmp_path / "calibration.json"
@@ -119,4 +128,3 @@ def test_calibration_is_bound_to_checkpoint_protocol_and_crop_grid(tmp_path):
     with pytest.raises(ValueError, match="protocol"):
         CheckpointPredictor(
             checkpoint, device="cpu", calibration=calibration, protocol="raw")
-

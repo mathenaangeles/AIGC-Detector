@@ -18,6 +18,13 @@ from .transforms import apply_named
 TTA_NAMES = ("identity", "jpeg90", "resize0.5", "crop80")
 
 
+def safe_amp_dtype(device):
+    """BF16 where safe; None means FP32 (FP16 is unsafe for the SRM path)."""
+    if torch.device(device).type == "cuda" and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return None
+
+
 def checkpoint_sha256(path, chunk_size=1024 * 1024):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -213,8 +220,10 @@ class CheckpointPredictor:
             num_workers=int(num_workers), pin_memory=self.device.type == "cuda")
         grouped = [[] for _ in paths]
         grouped_tta = [{name: [] for name in TTA_NAMES} for _ in paths]
-        use_amp = self.device.type == "cuda"
-        dtype = torch.bfloat16 if use_amp and torch.cuda.is_bf16_supported() else torch.float16
+        # The unclamped SRM branch can overflow FP16. Use BF16 only where the
+        # device supports it; older GPUs such as TITAN V must stay in FP32.
+        dtype = safe_amp_dtype(self.device)
+        use_amp = dtype is not None
 
         for pixels, image_indices, tta_indices, image_sizes in loader:
             pixels = pixels.to(self.device, non_blocking=True)
