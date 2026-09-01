@@ -36,9 +36,13 @@ SLIDES = [
     {
         "title": "CamTrace-6M",
         "subtitle": "Robust AI-generated image detection under real-world transformations",
-        "bullets": ["Detect the image — not the way the dataset was saved"],
-        "seconds": 16,
-        "narration": "This is CamTrace six M, a robust AI image detector. The surprising part is not our accuracy. A content blind probe classified the raw benchmark perfectly without looking at pixels. CamTrace is designed to remove that shortcut and survive real world reposting.",
+        "bullets": [
+            "0.99976 mean AUC across 15 real-world transformations",
+            "JPEG · blur · resize · noise · colour jitter · crop",
+            "6.0M learned detector parameters · CPU-ready inference",
+        ],
+        "seconds": 18,
+        "narration": "This is CamTrace six M: robust AI image detection after compression, blur, resizing, noise, colour changes, and cropping. It reaches zero point nine nine nine seven six mean transformed A U C. But the key insight came before training: a content blind probe classified the raw benchmark perfectly without looking at pixels.",
     },
     {
         "title": "First: audit the benchmark",
@@ -203,10 +207,12 @@ def main():
         run("say", "-v", "Samantha", "-r", "176", "-o", str(audio), spec["narration"])
         run(
             "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(slide),
-            "-i", str(audio), "-filter_complex", "[1:a]apad=pad_dur=1[a]",
+            "-i", str(audio), "-filter_complex",
+            "[1:a]aresample=48000,pan=stereo|c0=c0|c1=c0,volume=5dB,alimiter=limit=0.95,apad=pad_dur=1[a]",
             "-map", "0:v", "-map", "[a]", "-t", str(spec["seconds"]),
             "-r", "30", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", str(segment),
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+            "-ar", "48000", "-ac", "2", "-disposition:a:0", "default", str(segment),
         )
         segments.append(segment)
     concat = BUILD / "concat.txt"

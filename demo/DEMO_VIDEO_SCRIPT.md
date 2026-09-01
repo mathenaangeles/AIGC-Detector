@@ -40,16 +40,35 @@ unattributed images.
 
 ## Timed narration and actions
 
+### First-page content
+
+Keep the existing TikTok, CamTrace-6M, Track 5, and problem-statement text.
+Add this compact proof block in the open lower-left area:
+
+> **0.99976 mean transformed AUC**<br>
+> 15 transformations · 904 bias-matched images<br>
+> 6.0M learned parameters · CPU-ready
+
+Place it directly below the problem statement and above the Track 5 pill. Make
+the first line bold white at roughly 24–28 px; use 15–18 px for the other two
+lines. Highlight only `0.99976` in TikTok cyan. Do not add another illustration
+or paragraph—the current right-side artwork is already the focal point.
+
+Optional small footer, only if it remains readable:
+`github.com/mathenaangeles/AIGC-Detector`
+
 ### 0:00–0:15 — Hook
 
-**Click:** Show the README title and measured-status paragraph.
+**Click:** Hold on the title page long enough to read the proof block, then
+show the README title and measured-status paragraph.
 
 **Say:**
 
-> This is CamTrace-6M, a robust AI-image detector. The surprising part is not
-> our accuracy. It is that a content-blind probe classified the raw benchmark
-> perfectly without looking at pixels. CamTrace is designed to remove that
-> shortcut and survive real-world reposting.
+> This is CamTrace-6M: robust AI-image detection after compression, blur,
+> resizing, noise, colour changes, and cropping. It reaches zero point nine
+> nine nine seven six mean transformed AUC. But the key insight came before
+> training: a content-blind probe classified the raw benchmark perfectly
+> without looking at pixels.
 
 ### 0:15–0:38 — Problem insight
 
