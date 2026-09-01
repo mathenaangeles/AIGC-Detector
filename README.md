@@ -8,7 +8,7 @@ AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector
 2. a bias-matched evaluation protocol that removes those shortcuts; and
 3. a detector built around camera-pipeline evidence, trained with transformation consistency.
 
-> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, degradation-aware fusion, checkpoint-driven robustness grid, temperature calibration, and real-weight CPU inference are implemented and tested.
+> **Measured status:** 195 tests pass (12 environment/data-dependent skips). Five trained ablations, raw and bias-matched robustness grids, calibrated CPU inference, and ranked error analysis are complete. Results below are read directly from [`reports/`](reports/); no placeholder scores remain.
 
 ## Project Contribution
 
@@ -24,6 +24,89 @@ The repository's content-blind logistic-regression probe measured:
 The raw benchmark can therefore be solved perfectly without looking at image content. After matching encoder, subsampling, and dimensions, only bytes-per-pixel varies; the remaining AUC mostly measures the different compressibility of the image content.
 
 The full, executed exhibit is in [`notebooks/01_confound_demo.ipynb`](notebooks/01_confound_demo.ipynb).
+
+## Measured Results
+
+All detector results below use the SID_Set validation data available during the
+72-hour build. The primary protocol re-encodes crops through one JPEG pipeline
+and evaluates a resolution-matched subset of 904 images (452 per class). This
+controls the measured storage shortcut, but it is not an unseen-generator or
+external-dataset test.
+
+### Robustness under the bias-matched protocol
+
+Each cell is image-level ROC AUC over eight native-resolution crops. `Jitter`
+is the worse of the low/high colour-jitter variants; `Mean transformed` averages
+all 15 non-clean conditions. Full-precision results and fixed-threshold accuracy
+are in [`reports/robustness_table.md`](reports/robustness_table.md).
+
+| Method | Clean | JPEG30 | Blur 2.0 | Resize 0.25 | Noise 0.10 | Jitter | Crop 0.80 | Mean transformed |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CLIP attention probe | **1.00000** | 0.99968 | 0.99966 | 0.99954 | 0.99792 | 0.99976 | 0.99991 | 0.99967 |
+| SRM only | 0.99944 | 0.98839 | 0.94047 | 0.92855 | 0.90833 | 0.99845 | 0.99950 | 0.97894 |
+| CLIP + SRM, λ=0 | 0.99998 | 0.99959 | 0.99935 | 0.99944 | 0.99709 | 0.99975 | 0.99991 | 0.99953 |
+| CLIP + SRM, λ=1 | 0.99998 | **0.99979** | **0.99976** | **0.99972** | **0.99878** | **0.99992** | **0.99998** | **0.99981** |
+| Degradation-aware gate, λ=1 | 0.99998 | 0.99977 | 0.99969 | 0.99967 | 0.99849 | 0.99986 | 0.99998 | 0.99976 |
+
+The KL consistency objective is the useful ablation: against the same two
+branches without KL, it raises mean transformed AUC from `0.99953` to `0.99981`
+and mean fixed-operating-point accuracy from `97.286%` to `98.311%`. The gate is
+a measured parity result, not a claimed breakthrough: it reaches `98.348%` mean
+transformed accuracy but `0.99976` mean transformed AUC. The standalone CLIP
+probe remains strongest on mean fixed-threshold accuracy (`98.510%`) on this
+saturated, same-source split. External generator testing is therefore required
+before choosing a production checkpoint solely from these differences.
+
+The uncontrolled raw grid tells the same ranking story with slightly inflated
+scores; its full output is in
+[`reports/robustness_table_raw.md`](reports/robustness_table_raw.md).
+
+### Training ablation and wall-clock
+
+These are single-run measurements on one NVIDIA H100 NVL in the NUS SoC
+cluster. Time covers the trainer recorded in `metrics.json`; queueing and the
+one-time 18.4-minute, 24.1 GiB CLIP cache build are excluded.
+
+| Run | Trainable parameters | Epochs run | Best epoch | Matched-val AUC | Training time |
+|---|---:|---:|---:|---:|---:|
+| CLIP, λ=1 | 1,447,683 | 8 | 4 | 0.99812 | 2h 29m 35s |
+| SRM, λ=1 | 4,554,755 | 10 | 9 | 0.99579 | 59m 22s |
+| CLIP + SRM, λ=0 | 6,002,438 | 10 | 6 | **0.99932** | 2h 33m 57s |
+| CLIP + SRM, λ=1 | 6,002,438 | 10 | 9 | 0.99908 | 2h 33m 13s |
+| Gate only, initialized from λ=1 | 392 | 3 | 0 | 0.99901 | 41m 57s |
+
+KL slightly lowers the clean matched-validation selection score while improving
+the transformation grid. That is precisely why clean validation alone is an
+insufficient selection criterion for a robustness-focused detector. These
+measurements do **not** support the original planning estimate of training on a
+T4 in under an hour, so this README does not make that claim.
+
+For the remaining measured passes, the bias-matched robustness grid took
+`13m 42s` on one H100 NVL, the raw grid took `18m 06s` on one H100 NVL, and
+error analysis took `12m 26s` on one H100 NVL. Full multicrop/TTA calibration
+took `45m 10s` on one TITAN V in FP32.
+
+### Calibration and failure analysis
+
+Temperature scaling on the 904-image matched split learned `T=0.162786`, reduced
+NLL from `0.024487` to `0.020112`, and selected threshold `0.427470`. The
+achieved FPR is `0.88%` (four of 452 real images), the closest conservative
+discrete operating point below 1%; see
+[`reports/calibration.md`](reports/calibration.md).
+
+Across the 16-condition error-analysis grid, the selected gated checkpoint has
+214 false-positive condition-cases out of 7,232 real cases (`2.96%`) and 14
+false-negative condition-cases out of 7,232 synthetic cases (`0.19%`). Resize
+has the highest grouped FPR (`4.76%`); Gaussian noise has the highest grouped
+FNR (`0.37%`). Visual inspection shows false positives clustering around
+already defocused or low-detail photographs after blur, resampling, or JPEG,
+while false negatives cluster around near-white minimalist generations and a
+few synthetic scenes after strong noise. Several conditions repeatedly fail on
+the same underlying images, so these are concentrated sensitivities rather
+than uniform collapse.
+
+[View the ranked 12 FP / 12 FN contact sheet](reports/error_contact_sheet.png)
+or read the complete [`error_analysis.md`](reports/error_analysis.md).
 
 ## Architecture
 
@@ -41,7 +124,7 @@ native-resolution image
              │ trainable attention      │       branch logits      │   │
              │ probe → branch logits    │                          │   │
              └──────────────┬───────────┴─────────────┬────────────┘   │
-                            └── learned softmax fusion ┘                │
+                            └── global or gated fusion ┘                │
                                          ↓                             │
                                   P(AI-generated)                       │
                                                                        │
@@ -76,12 +159,12 @@ L = CE(f(I), y) + CE(f(T(I)), y) + λ · KL(f(I) || f(T(I)))
 
 | Component | Parameters | Trainable now? |
 |---|---:|:---:|
-| CLIP ViT-L/14 vision encoder | ~303.9M | No |
+| CLIP ViT-L/14 vision encoder | 303,966,208 | No |
 | Attention-probe head | 1,447,682 | Yes |
 | SRM residual CNN | 4,554,754 | Yes |
 | Two-branch fusion weights | 2 | Yes |
-| Degradation-aware gate | 392 | P8 only |
-| **Current two-branch total** | **~309.9M** | **~6.0M** |
+| Degradation-aware gate | 392 | Gate-training phase only |
+| **Gated model total** | **309,969,038** | **392 in P8; 6,002,438 in P7** |
 
 The model is comfortably below the competition's 2B-parameter limit. Enabling P8 adds only the 392-parameter gate shown above. The optional spectral head is not included because it remains inactive.
 
@@ -118,8 +201,8 @@ tests/                                 Unit, leakage, and end-to-end smoke tests
 Install the locked environment:
 
 ```bash
-git clone <your-repository-url>
-cd "AIGC Detector"
+git clone https://github.com/mathenaangeles/AIGC-Detector.git
+cd AIGC-Detector
 uv sync --all-groups
 ```
 
@@ -307,12 +390,51 @@ runs/<timestamp>/
 
 Early stopping defaults to AUC on `val_matched`. If that manifest is unavailable, the trainer records a fallback to ordinary validation AUC. Overall and bpp-stratified validation AUC are logged together so shortcut-driven gains remain visible.
 
+## Reproduce the measured pipeline
+
+From a configured checkout with SID_Set extracted, the measured path is:
+
+```bash
+# 1. Deterministic manifests and bias-matched validation subset
+uv run python scripts/build_manifest.py
+
+# 2. Validate data isolation, files, and disk
+uv run python scripts/preflight_train.py
+
+# 3. Build the frozen CLIP crop cache
+sbatch scripts/slurm_cache.sbatch
+
+# 4. Train P7 ablations; vary BRANCH_MODE, LAMBDA_CONSISTENCY, and RUN_TAG
+sbatch --export=ALL,BRANCH_MODE=both,LAMBDA_CONSISTENCY=1.0,RUN_TAG=p7-both-kl1 \
+  scripts/slurm_train.sbatch
+
+# 5. Train the gate from the robust two-branch checkpoint
+GATING=1 FREEZE_BRANCHES=1 INIT_CHECKPOINT=runs/p7-both-kl1/model.pt \
+RUN_TAG=p8-gated-kl1 sbatch --export=ALL scripts/slurm_train.sbatch
+
+# 6. Raw and controlled robustness grids
+PROTOCOL=bias_matched OUT=reports/robustness_table.md \
+  sbatch scripts/slurm_evaluate.sbatch
+PROTOCOL=raw OUT=reports/robustness_table_raw.md \
+  sbatch scripts/slurm_evaluate.sbatch
+
+# 7. Calibration and error analysis
+sbatch scripts/slurm_calibrate.sbatch
+sbatch scripts/slurm_error_analysis.sbatch
+```
+
+The exact run metrics committed under [`reports/run_metrics/`](reports/run_metrics/)
+record seed, epoch history, parameter counts, precision, and wall-clock. Slurm
+scripts resolve the submission directory explicitly and place temporary worker
+files on node-local storage.
+
 ## NUS SoC Compute Cluster
 
 Enable **SoC Compute Cluster** in My SoC Services, connect to the SoC network or VPN, and log in through a designated Slurm login node:
 
 ```bash
-ssh <soc-userid>@xlogin.comp.nus.edu.sg
+ssh -J <soc-userid>@stujump.comp.nus.edu.sg \
+  <soc-userid>@xlogin.comp.nus.edu.sg
 ```
 
 Git does not transfer `data/`, `cache/`, or `runs/`; all three are intentionally ignored. On a fresh cluster clone, run the SID_Set download, extraction, and manifest commands from **Data setup** before submitting jobs. Build the 22–24 GiB CLIP token cache on the cluster rather than copying a partial local cache.
@@ -502,19 +624,30 @@ CLI overrides are written into each run's config snapshot.
 
 - Whole images are never resized before cropping. Resizing rewrites the high-frequency evidence used by the SRM branch.
 - COCO val2017 and DALL·E Advanced are held-out demonstration/evaluation data and never training data.
-- SID_Set cannot support unseen-generator validation because it has no generator field.
+- The reported detector grids are same-source SID_Set validation, not external or unseen-generator evidence. SID_Set has no generator field, so generator-level claims would be fabricated.
 - The residual bpp signal after bias matching is controlled and reported, not assumed to disappear completely.
 - CLIP token caching speeds the clean pass, but transformed views still require a live frozen-backbone pass.
-- The degradation-aware gate and robustness runner are implemented; the generated P9 report must be copied from the training cluster before its numbers can be documented here.
+- The gate is technically successful but does not materially beat the ungated KL model on AUC; its tiny fixed-threshold accuracy gain needs confirmation across seeds and external sources.
 - The spectral branch exists only as a placeholder and is disabled.
-- The calibration split is also used for model selection because no third labelled split is currently available; external held-out evaluation remains necessary.
-- The Kaggle reproduction notebook and qualitative error analysis remain to be completed.
+- The matched split is used for model selection, calibration, and reporting because no third labelled split was available. Calibration numbers are therefore descriptive, not an unbiased final-test estimate.
+- Results are single-seed (`1337`) measurements without confidence intervals.
+- The lightweight checkpoint excludes the frozen OpenAI CLIP weights; first use downloads them through `open_clip`. CPU inference works and was smoke-tested, but ViT-L/14 is not a low-latency edge model.
 
-## Roadmap
+## What I would do with more time
 
-- populate and interpret the checkpoint-driven robustness report
-- qualitative false-positive/false-negative analysis
-- package the selected checkpoint, calibration artifact, and reproduction notebook
+1. Train with WildFake and hold out complete generator directories, then evaluate once on untouched COCO/DALL·E data.
+2. Create disjoint model-selection, calibration, and final-test splits and repeat every ablation across at least three seeds with bootstrap confidence intervals.
+3. Add more real camera pipelines, social-media recompression chains, screenshots, text-heavy graphics, and minimalist generations—the error sheet shows these tails matter.
+4. Distil or replace ViT-L/14 for lower CPU latency while retaining the SRM branch and stability signal.
+5. Test whether a regularized or supervised gate improves materially; otherwise ship the simpler ungated KL ensemble or CLIP probe selected on external data.
+6. Publish the trained checkpoint and calibration JSON as a versioned release asset and add a fully executed reproduction notebook.
+
+## Team contribution
+
+This is a solo implementation. The project author performed the benchmark
+audit, data protocol design, model and training implementation, cluster runs,
+robustness evaluation, calibration, CPU inference validation, and error
+analysis. External libraries and pretrained weights are credited below.
 
 ## References
 

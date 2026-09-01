@@ -1,0 +1,384 @@
+{
+  "protocol": "bias_matched",
+  "split": "val_matched",
+  "manifest": "./data/manifest_val_matched.csv",
+  "checkpoint": "runs/p8-gated-kl1/model.pt",
+  "n_images": 904,
+  "n_conditions": 16,
+  "crops_per_image": 8,
+  "target_fpr": 0.01,
+  "threshold": 0.3067890514309208,
+  "achieved_clean_fpr": 0.008849557522123894,
+  "elapsed_sec": 745.7948117256165,
+  "n_false_positives": 214,
+  "n_false_negatives": 14,
+  "contact_sheet": "reports/error_contact_sheet.png",
+  "groups": {
+    "transform": {
+      "center_crop": {
+        "evaluated": 904,
+        "real": 452,
+        "synthetic": 452,
+        "fp": 10,
+        "fn": 0
+      },
+      "clean": {
+        "evaluated": 904,
+        "real": 452,
+        "synthetic": 452,
+        "fp": 4,
+        "fn": 0
+      },
+      "color_jitter": {
+        "evaluated": 1808,
+        "real": 904,
+        "synthetic": 904,
+        "fp": 20,
+        "fn": 2
+      },
+      "gaussian_blur": {
+        "evaluated": 2712,
+        "real": 1356,
+        "synthetic": 1356,
+        "fp": 45,
+        "fn": 2
+      },
+      "gaussian_noise": {
+        "evaluated": 2712,
+        "real": 1356,
+        "synthetic": 1356,
+        "fp": 49,
+        "fn": 5
+      },
+      "jpeg": {
+        "evaluated": 3616,
+        "real": 1808,
+        "synthetic": 1808,
+        "fp": 43,
+        "fn": 3
+      },
+      "resize": {
+        "evaluated": 1808,
+        "real": 904,
+        "synthetic": 904,
+        "fp": 43,
+        "fn": 2
+      }
+    },
+    "source": {
+      "sid_set": {
+        "evaluated": 14464,
+        "real": 7232,
+        "synthetic": 7232,
+        "fp": 214,
+        "fn": 14
+      }
+    },
+    "generator": {
+      "not_applicable": {
+        "evaluated": 7232,
+        "real": 7232,
+        "synthetic": 0,
+        "fp": 214,
+        "fn": 0
+      },
+      "unknown": {
+        "evaluated": 7232,
+        "real": 0,
+        "synthetic": 7232,
+        "fp": 0,
+        "fn": 14
+      }
+    }
+  },
+  "ranked": [
+    {
+      "row_index": 173,
+      "path": "data/train/sid_set/real/5714374aa94e89a1.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "gaussian_blur_s2",
+      "transform": "gaussian_blur",
+      "score": 0.8913909196853638,
+      "error": "fp",
+      "confidence": 0.5846018682544429
+    },
+    {
+      "row_index": 9,
+      "path": "data/train/sid_set/real/012a69e95e063457.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "jpeg_q50",
+      "transform": "jpeg",
+      "score": 0.876632034778595,
+      "error": "fp",
+      "confidence": 0.5698429833476741
+    },
+    {
+      "row_index": 289,
+      "path": "data/train/sid_set/real/9bc840cf2fa7cfcf.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "gaussian_noise_s0.02",
+      "transform": "gaussian_noise",
+      "score": 0.8632150987784067,
+      "error": "fp",
+      "confidence": 0.556426047347486
+    },
+    {
+      "row_index": 173,
+      "path": "data/train/sid_set/real/5714374aa94e89a1.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "resize_s0.25",
+      "transform": "resize",
+      "score": 0.8545391807953516,
+      "error": "fp",
+      "confidence": 0.5477501293644309
+    },
+    {
+      "row_index": 9,
+      "path": "data/train/sid_set/real/012a69e95e063457.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "gaussian_blur_s2",
+      "transform": "gaussian_blur",
+      "score": 0.8521944085756937,
+      "error": "fp",
+      "confidence": 0.545405357144773
+    },
+    {
+      "row_index": 289,
+      "path": "data/train/sid_set/real/9bc840cf2fa7cfcf.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "jpeg_q50",
+      "transform": "jpeg",
+      "score": 0.8310669958591461,
+      "error": "fp",
+      "confidence": 0.5242779444282253
+    },
+    {
+      "row_index": 288,
+      "path": "data/train/sid_set/real/9b98ce75f42d8fbe.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "gaussian_blur_s2",
+      "transform": "gaussian_blur",
+      "score": 0.8240780929724375,
+      "error": "fp",
+      "confidence": 0.5172890415415168
+    },
+    {
+      "row_index": 289,
+      "path": "data/train/sid_set/real/9bc840cf2fa7cfcf.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "jpeg_q30",
+      "transform": "jpeg",
+      "score": 0.782085527976354,
+      "error": "fp",
+      "confidence": 0.4752964765454332
+    },
+    {
+      "row_index": 9,
+      "path": "data/train/sid_set/real/012a69e95e063457.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "resize_s0.25",
+      "transform": "resize",
+      "score": 0.7659452358881632,
+      "error": "fp",
+      "confidence": 0.45915618445724243
+    },
+    {
+      "row_index": 289,
+      "path": "data/train/sid_set/real/9bc840cf2fa7cfcf.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "color_jitter_s0.2_lo",
+      "transform": "color_jitter",
+      "score": 0.7614750067392985,
+      "error": "fp",
+      "confidence": 0.4546859553083777
+    },
+    {
+      "row_index": 231,
+      "path": "data/train/sid_set/real/7bd336dd538daa87.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "gaussian_blur_s2",
+      "transform": "gaussian_blur",
+      "score": 0.7522118538618088,
+      "error": "fp",
+      "confidence": 0.445422802430888
+    },
+    {
+      "row_index": 323,
+      "path": "data/train/sid_set/real/af0919f88ad46c0f.jpg",
+      "label": 0,
+      "source": "sid_set",
+      "generator": "not_applicable",
+      "condition": "resize_s0.25",
+      "transform": "resize",
+      "score": 0.7485133111476898,
+      "error": "fp",
+      "confidence": 0.44172425971676904
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_noise_s0.1",
+      "transform": "gaussian_noise",
+      "score": 0.012181412506227693,
+      "error": "fn",
+      "confidence": 0.2946076389246931
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_noise_s0.05",
+      "transform": "gaussian_noise",
+      "score": 0.10254451694587867,
+      "error": "fn",
+      "confidence": 0.2042445344850421
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "color_jitter_s0.2_hi",
+      "transform": "color_jitter",
+      "score": 0.10504503610233466,
+      "error": "fn",
+      "confidence": 0.2017440153285861
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "jpeg_q50",
+      "transform": "jpeg",
+      "score": 0.16622362301374474,
+      "error": "fn",
+      "confidence": 0.14056542841717604
+    },
+    {
+      "row_index": 854,
+      "path": "data/train/sid_set/synthetic/full_synthetic_061964.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_noise_s0.05",
+      "transform": "gaussian_noise",
+      "score": 0.18821542880808315,
+      "error": "fn",
+      "confidence": 0.11857362262283763
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "color_jitter_s0.2_lo",
+      "transform": "color_jitter",
+      "score": 0.18956371396780014,
+      "error": "fn",
+      "confidence": 0.11722533746312064
+    },
+    {
+      "row_index": 854,
+      "path": "data/train/sid_set/synthetic/full_synthetic_061964.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_noise_s0.1",
+      "transform": "gaussian_noise",
+      "score": 0.19003283418715,
+      "error": "fn",
+      "confidence": 0.11675621724377078
+    },
+    {
+      "row_index": 695,
+      "path": "data/train/sid_set/synthetic/full_synthetic_033353.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_noise_s0.1",
+      "transform": "gaussian_noise",
+      "score": 0.1906305465963669,
+      "error": "fn",
+      "confidence": 0.11615850483455387
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "jpeg_q30",
+      "transform": "jpeg",
+      "score": 0.19444296602159739,
+      "error": "fn",
+      "confidence": 0.11234608540932339
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_blur_s2",
+      "transform": "gaussian_blur",
+      "score": 0.21622985104719797,
+      "error": "fn",
+      "confidence": 0.09055920038372281
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "resize_s0.5",
+      "transform": "resize",
+      "score": 0.25842320546507835,
+      "error": "fn",
+      "confidence": 0.048365845965842424
+    },
+    {
+      "row_index": 746,
+      "path": "data/train/sid_set/synthetic/full_synthetic_043405.png",
+      "label": 1,
+      "source": "sid_set",
+      "generator": "unknown",
+      "condition": "gaussian_blur_s1",
+      "transform": "gaussian_blur",
+      "score": 0.260354441901048,
+      "error": "fn",
+      "confidence": 0.04643460952987277
+    }
+  ]
+}
