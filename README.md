@@ -8,7 +8,7 @@ AIGC Detector starts from a simple problem with many AIGC benchmarks: a detector
 2. a bias-matched evaluation protocol that removes those shortcuts; and
 3. a detector built around camera-pipeline evidence, trained with transformation consistency.
 
-> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, and degradation-aware fusion are implemented and tested. The complete robustness-grid runner and trained-weight inference are TBD.
+> **Current status:** The confound probe, data isolation, native-resolution crop pipeline, frozen CLIP branch, SRM branch, feature cache, consistency trainer, degradation-aware fusion, and checkpoint-driven robustness grid are implemented and tested. Real-weight inference remains P10 work.
 
 ## Project Contribution
 
@@ -95,7 +95,7 @@ src/provenance/shortcut.py             Content-blind confound probe
 src/provenance/branches/clip_probe.py  Frozen CLIP, attention probe, token cache
 src/provenance/branches/srm.py         Fixed SRM bank and residual CNN
 src/provenance/train.py                P7 joint consistency trainer
-src/provenance/evaluate.py             AUC, bpp baseline, and stratified metrics
+src/provenance/evaluate.py             Checkpoint robustness grid and controlled metrics
 src/provenance/fuse.py                 Degradation estimates and per-image softmax gate
 src/provenance/calibrate.py            P10 placeholder
 scripts/                               Data, manifest, cache, and cluster helpers
@@ -335,16 +335,46 @@ Set `BRANCH_MODE` to `clip`, `srm`, or `both`. Other supported environment overr
 
 ## Evaluation controls
 
-The metrics layer currently supports:
+P9 evaluates any number of checkpoints on clean crops and every configured
+transform severity. Name methods with `NAME=RUN`; the name becomes the table row:
 
 ```bash
-uv run python -m provenance.evaluate --split val
-uv run python -m provenance.evaluate --split val_matched
+uv run python -m provenance.evaluate \
+  --runs \
+    clip=runs/p7-clip-kl1 \
+    srm=runs/p7-srm-kl1 \
+    both_no_kl=runs/p7-both-kl0 \
+    both_kl=runs/p7-both-kl1 \
+    gated=runs/p8-gated-kl1 \
+  --protocol bias_matched \
+  --device cuda \
+  --out reports/robustness_table.md
 ```
 
-It reports a content-shortcut baseline using out-of-fold logistic regression on bpp, plus AUC computed inside bpp quantile bins. A model should clear the bpp-only baseline and retain performance after stratification.
+`raw` defaults to the ordinary `val` split. `bias_matched` defaults to
+`val_matched` and passes every crop through the common JPEG encoder before the
+requested degradation. `--split` can explicitly override those defaults. The
+runner computes CLIP tokens once per batch and shares them across methods.
 
-The full clean-versus-transform checkpoint grid described in the implementation plan is not yet connected; that is P9 work.
+The Markdown report contains ROC AUC for clean plus all 15 transformed
+conditions, mean transformed AUC, and accuracy with each method's threshold
+fixed on its clean real scores at the configured 1% FPR. The same threshold is
+reused unchanged for every degradation. A machine-readable JSON file is written
+beside the report.
+
+On Slurm, run the bias-controlled headline table and the raw diagnostic table:
+
+```bash
+PROTOCOL=bias_matched OUT=reports/robustness_table.md \
+  sbatch scripts/slurm_evaluate.sbatch
+
+PROTOCOL=raw OUT=reports/robustness_table_raw.md \
+  sbatch scripts/slurm_evaluate.sbatch
+```
+
+The script defaults to all four P7 ablations and `runs/p8-gated-kl1`. Override
+its space-separated `EVAL_RUNS` environment variable if a run has a different
+directory name. Use `LIMIT=20` only for a balanced smoke test.
 
 ## Inference contract
 
@@ -399,13 +429,13 @@ CLI overrides are written into each run's config snapshot.
 - SID_Set cannot support unseen-generator validation because it has no generator field.
 - The residual bpp signal after bias matching is controlled and reported, not assumed to disappear completely.
 - CLIP token caching speeds the clean pass, but transformed views still require a live frozen-backbone pass.
-- The degradation-aware gate is implemented but still needs its P8 trained checkpoint and P9 robustness ablation.
+- The degradation-aware gate and robustness runner are implemented; the generated P9 report must be copied from the training cluster before its numbers can be documented here.
 - The spectral branch exists only as a placeholder and is disabled.
-- The robustness report, calibrated operating point, real-weight CPU predictor, and Kaggle reproduction notebook remain to be completed in later phases.
+- Real-weight CPU inference, calibration, and the Kaggle reproduction notebook remain to be completed in later phases.
 
 ## Roadmap
 
-- checkpoint-driven clean/transformation evaluation grid and robustness report
+- populate and interpret the checkpoint-driven robustness report
 - multi-crop CPU inference, TTA stability, and temperature calibration
 - qualitative false-positive/false-negative analysis
 
