@@ -440,6 +440,10 @@ files on node-local storage.
 
 ## NUS SoC Compute Cluster
 
+For a project-independent walkthrough covering SSH configuration, transfers,
+interactive allocations, reusable batch scripts, monitoring, and
+troubleshooting, see [`docs/SSH_SLURM_GUIDE.md`](docs/SSH_SLURM_GUIDE.md).
+
 Enable **SoC Compute Cluster** in My SoC Services, connect to the SoC network or VPN, and log in through a designated Slurm login node:
 
 ```bash
